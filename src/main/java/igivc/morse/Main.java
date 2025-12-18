@@ -14,11 +14,12 @@ public class Main {
         }
         avg /= readData.length;
         for (var b : readData) {
-            b -= (short)avg;
+            b -= (short) avg;
             power += (b * b);
         }
-        return (long)Math.sqrt(power);
+        return (long) Math.sqrt(power);
     }
+
     /**
      * Main method
      *
@@ -49,14 +50,14 @@ public class Main {
         System.in.read();
         receiver.stop();
         */
-        Receiver receiver = new Receiver();
-        try(var writer = new PrintWriter("morse.txt")) {
-            receiver.receive((c) -> {
-                System.out.print(c);
+        try (var writer = new PrintWriter("morse.txt")) {
+            Receiver receiver = new Receiver((s) -> {
+                System.out.print(s);
                 System.out.flush();
-                writer.print(c);
+                writer.print(s);
                 writer.flush();
             });
+            receiver.receive();
         }
     }
 }

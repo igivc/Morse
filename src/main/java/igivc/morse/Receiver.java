@@ -18,13 +18,17 @@ class Receiver {
     private SignalState signalState = null;
     private int savedSignalStatesIndex = -1;
     private int dotDurationInSamples;
+    private final DashDotClassifier dashDotClassifier;
+
+    public Receiver(Consumer<String> consumer) {
+        dashDotClassifier = new DashDotClassifier(consumer);
+    }
+
 
     /**
      * Receives Morse symbols
-     *
-     * @param consumer receives Morse characters '.', '-', ' ', '|'
      */
-    void receive(Consumer<Character> consumer) {
+    void receive() {
         signalState = new SignalState();
         savedSignalStates[0] = savedSignalStates[1] = null;
         savedSignalStatesIndex = -1;
@@ -61,13 +65,13 @@ class Receiver {
                 ringBuffer.copyTo(samplesToProcess, 0, nWindowSamples);
                 ringBuffer.discard(shift);
                 hilbertEnvelope.envelope();
-                processEnvelope(consumer, leftOffset, rightOffset, processedSamples);
+                processEnvelope(leftOffset, rightOffset, processedSamples);
             }
         }
 
     }
 
-    private void processEnvelope(Consumer<Character> consumer, int leftOffset, int rightOffset,
+    private void processEnvelope(int leftOffset, int rightOffset,
                                  double[] processedSamples) {
         for (int i = leftOffset; i < rightOffset; i++) {
             final SignalLevel signalLevel = processedSamples[i] > silenceLevel ? SignalLevel.High : SignalLevel.Low;
@@ -91,15 +95,15 @@ class Receiver {
                     savedSignalStates[0] = savedSignalStates[1]; // shift the latest state to the previous position
                     savedSignalStates[1] = null;
                     savedSignalStatesIndex = 0;
-                    detectDashDotDurations(consumer, ss);
+                    detectDashDotDurations(ss);
                 }
 
                 signalState.durationInSamples = 0;
                 signalState.signalLevel = signalLevel;
             } else if (signalState.durationInSamples > flushDetectionBuffers * sampleRate &&
                     savedSignalStatesIndex > -1) {
-                detectDashDotDurations(consumer, savedSignalStates[0]);
-                detectDashDotDurations(consumer, signalState);
+                detectDashDotDurations(savedSignalStates[0]);
+                detectDashDotDurations(signalState);
                 savedSignalStates[0] = null;
                 savedSignalStatesIndex = -1;
             }
@@ -107,7 +111,7 @@ class Receiver {
         }
     }
 
-    private void detectDashDotDurations(Consumer<Character> consumer, SignalState signalState) {
+    private void detectDashDotDurations(SignalState signalState) {
         final int detectorQueueLength = 20;
         statesForDetection.addLast(signalState);
         if (statesForDetection.size() >= detectorQueueLength) {
@@ -128,7 +132,7 @@ class Receiver {
                 dotDurationInSamples = dotDuration;
                 if (firstUpdate) {
                     for (var ss : statesForDetection) {
-                        detectMorseSign(consumer, ss);
+                        dashDotClassifier.process(ss, dotDurationInSamples);
                     }
                 }
                 while (statesForDetection.size() >= detectorQueueLength) {
@@ -139,34 +143,10 @@ class Receiver {
         }
 
         if (dotDurationInSamples > 0) {
-            detectMorseSign(consumer, signalState);
+            dashDotClassifier.process(signalState, dotDurationInSamples);
         }
     }
 
-    private void detectMorseSign(Consumer<Character> consumer, SignalState ss) {
-        float ratio = (float) ss.durationInSamples / dotDurationInSamples;
-        switch (ss.signalLevel) {
-            case High:
-                if (ratio > 0.5 && ratio < 1.5) {
-                    consumer.accept('.');
-                } else if (ratio > 2.5 && ratio < 3.5) {
-                    consumer.accept('-');
-                } else {
-                    consumer.accept('?'); // not recognized
-                }
-                break;
-            case Low:
-                if (ratio > 0.5 && ratio < 1.5) {
-                    // small space inside the same character
-                } else if (ratio > 2.5 && ratio < 3.5) {
-                    consumer.accept('|');
-                } else if (ratio > 5 && ratio < 10) {
-                    consumer.accept(' ');
-                } else {
-                    consumer.accept('#'); // silence
-                }
-                break;
-        }
-    }
+
 
 }
