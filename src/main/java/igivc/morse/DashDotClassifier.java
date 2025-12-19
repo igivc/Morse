@@ -2,9 +2,10 @@ package igivc.morse;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
-class DashDotClassifier {
+class DashDotClassifier implements BiConsumer<SignalState, Integer> {
     private enum Duration {Short, Middle, Long, Large}
     private final Consumer<String> consumer;
 
@@ -25,7 +26,8 @@ class DashDotClassifier {
         symbols.get(SignalLevel.Low).put(Duration.Large, "#");
     }
 
-    public void process(SignalState ss, int dotDurationInSamples) {
+    @Override
+    public void accept(SignalState ss, Integer dotDurationInSamples) {
         float ratio = (float) ss.durationInSamples / dotDurationInSamples;
         if (ratio > 0.5 && ratio < 1.5) {
             accept(ss.signalLevel, Duration.Short);
